@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 <!-- Describe the feature set of the initial release here -->
+
 -
 -
 -
@@ -42,5 +43,5 @@ to the corresponding tag on GitHub, or the diff
 in comparison to the previous release
 -->
 
-[Unreleased]: https://github.com/<author>/<my-package>/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/<author>/<my-package>/releases/tag/v0.1.0
+[Unreleased]: https://github.com/bfeitknecht/<spicky>/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/bfeitknecht/<spicky>/releases/tag/v0.1.0
