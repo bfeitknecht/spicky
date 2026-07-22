@@ -1,5 +1,5 @@
 <picture>
-  <img src="./assets/thumbnail.png">
+  <img src="./assets/thumbnail.png" alt="Thumbnail of the spicky cheatsheet template">
 </picture>
 
 # The `spicky` Package Cheatsheet Template
@@ -60,7 +60,7 @@ Usage is pretty simple. Instantiate the package with your information. Use the p
 ```
 
 <picture>
-  <img src="./assets/example.png">
+  <img src="./assets/example.png" alt="Example cheat sheet generated with the spicky package showing definitions, examples, and recipes">
 </picture>
 
 ## Additional Documentation and Acknowledgments
