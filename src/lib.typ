@@ -14,7 +14,7 @@
 ) = {
   set page(
     flipped: true,
-    numbering: "1",
+    numbering: "1/1",
     number-align: right,
     columns: 3,
     margin: (rest: 0.635cm),
@@ -39,7 +39,7 @@
   doc
 }
 
-#let container(fill: white, ref: str, title, body) = {
+#let container(fill: white, ref: str, title, body, ..rest) = {
   set heading(numbering: none)
 
   showybox(
@@ -70,17 +70,29 @@
       color: black,
     ),
     breakable: false,
+    spacing: 1em,
 
     [
       #underline[#title]
       #body
     ],
+    ..rest,
   )
 }
 
-#let definition(title, body) = container(fill: white.darken(20%), title, body)
-#let example(title, body) = container(fill: white.darken(10%), title, body)
-#let recipe(title, body) = container(fill: white, title, body)
+#let definition(title, body, ..rest) = container(
+  fill: white.darken(20%),
+  title,
+  body,
+  ..rest,
+)
+#let example(title, body, ..rest) = container(
+  fill: white.darken(10%),
+  title,
+  body,
+  ..rest,
+)
+#let recipe(title, body, ..rest) = container(fill: white, title, body, ..rest)
 
 #let grid = tablem.with(
   render: (columns: auto, align: auto, ..args) => {

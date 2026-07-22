@@ -12,10 +12,22 @@
 
 #definition[=== Definition][
   Something is defined as $top$.
+][
+  Important additional information.
 ]
 
-#example[=== Example <ex>][
+#example[=== Example][
   This is an example of something.
+  #pseudo[
+    + n := 13;
+    + f0 := 0;
+    + f1 := 1;
+    + *while* n <= k *do*
+      + f1 := f0 + f1;
+      + *swap* f0 f1;
+      + k += 1
+    + *end*
+  ]
 ]
 
 #recipe[=== Recipe][
