@@ -30,11 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-<!-- Describe the feature set of the initial release here -->
-
--
--
--
+- Initial release of the spicky templating engine.
+- Added basic template rendering support.
+- Provided example templates in the `assets` directory.
+- Added documentation and a quick start guide.
 
 <!--
 Below are the target URLs for each version
@@ -43,5 +42,5 @@ to the corresponding tag on GitHub, or the diff
 in comparison to the previous release
 -->
 
-[Unreleased]: https://github.com/bfeitknecht/<spicky>/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/bfeitknecht/<spicky>/releases/tag/v0.1.0
+[Unreleased]: https://github.com/bfeitknecht/spicky/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/bfeitknecht/spicky/releases/tag/v0.1.0

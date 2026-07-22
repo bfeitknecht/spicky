@@ -10,7 +10,7 @@ default:
 doc:
   typst compile docs/manual.typ docs/manual.pdf
   typst compile docs/thumbnail.typ assets/thumbnail.svg
-  typst compile docs/example.typ assets/example.svg
+  typst compile docs/example.typ assets/example.png
 
 # run test suite
 test *args:

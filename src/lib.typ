@@ -39,7 +39,7 @@
   doc
 }
 
-#let container(fill: white, ref: str, title, body, ..rest) = {
+#let container(fill: white, title, body, ..rest) = {
   set heading(numbering: none)
 
   showybox(
