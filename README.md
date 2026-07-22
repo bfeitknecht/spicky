@@ -1,5 +1,5 @@
 <picture>
-  <img src="./assets/thumbnail.svg">
+  <img src="./assets/thumbnail.png">
 </picture>
 
 # The `spicky` Package Cheatsheet Template
