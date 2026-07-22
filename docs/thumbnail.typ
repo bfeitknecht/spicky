@@ -1,5 +1,5 @@
 #set page(
-  width: auto,
+  width: 11.25in,
   height: auto,
   margin: 5pt,
   fill: none,
