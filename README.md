@@ -60,7 +60,7 @@ Usage is pretty simple. Instantiate the package with your information. Use the p
 ```
 
 <picture>
-  <img src="./assets/example.svg">
+  <img src="./assets/example.png">
 </picture>
 
 ## Additional Documentation and Acknowledgments
