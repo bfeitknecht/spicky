@@ -31,6 +31,7 @@ Usage is pretty simple. Instantiate the package with your information. Use the p
 
 #example[=== Example][
   This is an example of something.
+
   #pseudo[
     + n := 13;
     + f0 := 0;
@@ -56,7 +57,6 @@ Usage is pretty simple. Instantiate the package with your information. Use the p
     | $N$ | $D_N$ | $I_N$ |
   ]
 ]
-
 ```
 
 <picture>

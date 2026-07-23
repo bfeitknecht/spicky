@@ -18,6 +18,7 @@
 
 #example[=== Example][
   This is an example of something.
+
   #pseudo[
     + n := 13;
     + f0 := 0;

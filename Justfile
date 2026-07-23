@@ -8,7 +8,7 @@ default:
 
 # generate manual
 doc:
-  typst compile docs/manual.typ docs/manual.pdf
+  # typst compile docs/manual.typ docs/manual.pdf
   typst compile docs/thumbnail.typ assets/thumbnail.png --ppi 700
   typst compile docs/example.typ assets/example.png
 
