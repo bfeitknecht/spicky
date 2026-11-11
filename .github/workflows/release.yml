@@ -1,141 +1,278 @@
-name: Package, release, publish
+# Publish a GitHub Release for each v<version> tag. Typst Universe submission
+# stays opt-in until UNIVERSE_TOKEN and UNIVERSE_SUBMIT are configured.
+#
+# Settings (see docs/release.md):
+# - Secret UNIVERSE_TOKEN: Contents: read/write on UNIVERSE_REPO and Pull requests:
+#   read/write on typst/packages.
+# - Variable UNIVERSE_SUBMIT: set to "true" to enable the Universe PR job.
+# - Variable UNIVERSE_REPO (optional): fork target; defaults to github.com/bfeitknecht/packages.
+
+name: Release & submit to Typst Universe
+
 on:
   push:
-    tags: [ v* ]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish or resubmit (for example v0.2.0)
+        required: true
+        type: string
 
-env:
-  # the forge (host) at which the registry lies
-  # for Universe, this is Github (https://github.com)
-  REGISTRY_FORGE: https://github.com
-  # the repository hosting published packages
-  # this is cloned to ensure pull requests are based on the latest upstream commit
-  # for Universe, this is typst/packages (https://github.com/typst/packages/)
-  # the `secrets.REGISTRY_TOKEN` must be able to read from this repo
-  REGISTRY_REPO: typst/packages
-  # the repository to which to push the release version
-  # this should be a fork of the registry repo that you have push privileges to
-  # the `secrets.REGISTRY_TOKEN` must be able to push to this repo
-  REGISTRY_FORK: bfeitknecht/packages
-  # the path within the registry repo where the "<name>/<version>" directory should be put
-  # for Universe, this is packages/preview
-  PATH_PREFIX: packages/preview
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    name: Build
+    name: Validate and package
     runs-on: ubuntu-latest
     outputs:
-      pkg-name: ${{ env.PKG_NAME }}
-      pkg-version: ${{ env.PKG_VERSION }}
-      pkg-id: ${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}
-      git-user-name: ${{ env.GIT_USER_NAME }}
-      git-user-email: ${{ env.GIT_USER_EMAIL }}
-
+      pkg_name: ${{ steps.metadata.outputs.pkg_name }}
+      pkg_version: ${{ steps.metadata.outputs.pkg_version }}
+      pkg_id: ${{ steps.metadata.outputs.pkg_id }}
     steps:
-      - name: Checkout
+      - name: Checkout release tag
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install just
         uses: taiki-e/install-action@v2
         with:
           tool: just
 
-      - name: Determine and check package metadata
+      - name: Setup Typst
+        uses: typst-community/setup-typst@v4
+        with:
+          typst-version: 0.15.1
+
+      - name: Validate tag and package metadata
+        id: metadata
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          set -eu
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          import tomllib
+          from pathlib import Path
+
+          package = tomllib.loads(Path("typst.toml").read_text())["package"]
+          name, version = package["name"], package["version"]
+          tag = os.environ["RELEASE_TAG"]
+          if tag != f"v{version}":
+              raise SystemExit(f"release tag {tag!r} must match package version v{version}")
+          print(f"pkg_name={name}")
+          print(f"pkg_version={version}")
+          print(f"pkg_id={name}-{version}")
+          PY
+
+      - name: Run tests and build package documentation
+        run: |
+          just test
+          just doc
+
+      - name: Create release archive
+        env:
+          PKG_NAME: ${{ steps.metadata.outputs.pkg_name }}
+          PKG_VERSION: ${{ steps.metadata.outputs.pkg_version }}
+        run: |
+          set -eu
           . scripts/setup
-          echo "PKG_NAME=${PKG_PREFIX}" >> "${GITHUB_ENV}"
-          echo "PKG_VERSION=${VERSION}" >> "${GITHUB_ENV}"
+          just package "$RUNNER_TEMP/package-root"
+          mkdir -p dist
+          cd "$RUNNER_TEMP/package-root"
+          zip -qr "$GITHUB_WORKSPACE/dist/${PKG_NAME}-${PKG_VERSION}.zip" "${PKG_NAME}/${PKG_VERSION}"
 
-          if [[ "${GITHUB_REF_NAME}" != "v${VERSION}" ]]; then
-            echo "package version ${VERSION} does not match release tag ${GITHUB_REF_NAME}" >&2
-            exit 1
-          fi
-
-          echo "GIT_USER_NAME=$(git log -1 --pretty=format:'%an')" >> "${GITHUB_ENV}"
-          echo "GIT_USER_EMAIL=$(git log -1 --pretty=format:'%ae')" >> "${GITHUB_ENV}"
-
-      - name: Create archives
-        run: |
-          just package out
-          mkdir dist
-          cd out
-          zip -r "../dist/${PKG_NAME}-${PKG_VERSION}.zip" "${PKG_NAME}"
-          # TODO create tar.gz with same contents as packages.typst.org
-
-      - name: Upload artifacts
+      - name: Upload package archive
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}
-          path: dist/*
-          retention-days: 3
+          name: ${{ steps.metadata.outputs.pkg_id }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 5
 
-  release:
-    name: Create Release
+  github-release:
+    name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
-      - name: Download artifacts
+      - name: Download package archive
         uses: actions/download-artifact@v4
         with:
-          pattern: ${{ needs.build.outputs.pkg-id }}
+          name: ${{ needs.build.outputs.pkg_id }}
+          path: dist
 
-      - name: Add artifacts to release
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: ${{ needs.build.outputs.pkg-id }}/*
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          PKG_NAME: ${{ needs.build.outputs.pkg_name }}
+          PKG_VERSION: ${{ needs.build.outputs.pkg_version }}
+        run: |
+          set -eu
+          archive="dist/${PKG_NAME}-${PKG_VERSION}.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$archive" --clobber
+          else
+            gh release create "$TAG" "$archive" --title "$TAG" --generate-notes
+          fi
 
-  publish:
-    name: Publish to a registry fork
-    needs: build
+  universe-pr:
+    name: Open Typst Universe PR
+    needs: [build, github-release]
     runs-on: ubuntu-latest
-
+    if: ${{ vars.UNIVERSE_SUBMIT == 'true' }}
+    env:
+      PKG_NAME: ${{ needs.build.outputs.pkg_name }}
+      PKG_VERSION: ${{ needs.build.outputs.pkg_version }}
+      UPSTREAM_REPO: typst/packages
+      UNIVERSE_REPO: ${{ vars.UNIVERSE_REPO || 'github.com/bfeitknecht/packages' }}
     steps:
-      - name: Checkout package registry
-        uses: actions/checkout@v6
-        with:
-          github-server-url: ${{ env.REGISTRY_FORGE }}
-          repository: ${{ env.REGISTRY_REPO }}
-          token: ${{ secrets.REGISTRY_TOKEN }}
-          path: package-registry
-          sparse-checkout: ${{ env.PATH_PREFIX }}/${{ needs.build.outputs.pkg-name }}/${{ needs.build.outputs.pkg-version }}
-
-      - name: Download artifacts
+      - name: Download package archive
         uses: actions/download-artifact@v4
         with:
-          pattern: ${{ needs.build.outputs.pkg-id }}
+          name: ${{ needs.build.outputs.pkg_id }}
+          path: package-archive
 
-      - name: Commit package release
+      - name: Require UNIVERSE_TOKEN
         env:
-          PKG_NAME: ${{ needs.build.outputs.pkg-name }}
-          PKG_VERSION: ${{ needs.build.outputs.pkg-version }}
-          PKG_ID: ${{ needs.build.outputs.pkg-id }}
-          GIT_USER_NAME: ${{ needs.build.outputs.git-user-name }}
-          GIT_USER_EMAIL: ${{ needs.build.outputs.git-user-email }}
+          GH_TOKEN: ${{ secrets.UNIVERSE_TOKEN }}
         run: |
-          unzip "${PKG_ID}/${PKG_ID}.zip" -d "${PKG_ID}"
-          mkdir -p "package-registry/${PATH_PREFIX}/${PKG_NAME}"
-          mv "${PKG_ID}/${PKG_NAME}/${PKG_VERSION}" "package-registry/${PATH_PREFIX}/${PKG_NAME}"
-          rmdir "${PKG_ID}/${PKG_NAME}"
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::missing UNIVERSE_TOKEN — add a token with push access to ${UNIVERSE_REPO} and PR access to ${UPSTREAM_REPO}."
+            exit 1
+          fi
 
-          cd package-registry
-          git config user.name "${GIT_USER_NAME}"
-          git config user.email "${GIT_USER_EMAIL}"
-          git checkout -b "${PKG_ID}"
-          git add .
-          git commit -m "${PKG_NAME}:${PKG_VERSION}"
+      - name: Resolve UNIVERSE_REPO
+        run: |
+          set -eu
+          repo="${UNIVERSE_REPO#https://}"
+          repo="${repo#http://}"
+          repo="${repo%/}"
+          repo="${repo%.git}"
+          case "$repo" in
+            */*/*) host="${repo%%/*}"; slug="${repo#*/}" ;;
+            *)     host="github.com"; slug="$repo" ;;
+          esac
+          case "$slug" in
+            */*/*) echo "::error::UNIVERSE_REPO must name one repository, got '$UNIVERSE_REPO'."; exit 1 ;;
+            */*) ;;
+            *) echo "::error::UNIVERSE_REPO must be owner/repo, got '$UNIVERSE_REPO'."; exit 1 ;;
+          esac
+          echo "UNIVERSE_HOST=$host" >> "$GITHUB_ENV"
+          echo "UNIVERSE_SLUG=$slug" >> "$GITHUB_ENV"
 
-      - name: Push package release to the fork
+      - name: Stage and validate the Universe payload
         env:
-          PKG_ID: ${{ needs.build.outputs.pkg-id }}
+          PKG_NAME: ${{ needs.build.outputs.pkg_name }}
+          PKG_VERSION: ${{ needs.build.outputs.pkg_version }}
         run: |
-          cd package-registry
-          git remote add fork "${REGISTRY_FORGE}/${REGISTRY_FORK}"
+          set -eu
+          archive="package-archive/${PKG_NAME}-${PKG_VERSION}.zip"
+          mkdir payload
+          unzip -q "$archive" -d payload
+          staged="universe-stage/packages/preview/${PKG_NAME}/${PKG_VERSION}"
+          mkdir -p "$(dirname "$staged")"
+          cp -R "payload/${PKG_NAME}/${PKG_VERSION}" "$staged"
+          test -f "$staged/typst.toml"
+          test -f "$staged/README.md"
+          test -f "$staged/src/lib.typ"
 
-          echo "NOTE: if the following command fails with"
-          echo '  "refusing to allow a Personal Access Token to create or update workflow'
-          echo '  `.github/workflows/deploy.yml` without `workflow` scope"'
-          echo "then you need to bring your fork's main branch up to date with the registry repo"
-          git push --force --set-upstream fork "${PKG_ID}"
+      - name: Setup Typst
+        uses: typst-community/setup-typst@v4
+        with:
+          typst-version: 0.15.1
+
+      - name: Compile the staged template as Universe will
+        env:
+          PKG_NAME: ${{ needs.build.outputs.pkg_name }}
+          PKG_VERSION: ${{ needs.build.outputs.pkg_version }}
+        run: |
+          set -eu
+          staged="universe-stage/packages/preview/${PKG_NAME}/${PKG_VERSION}"
+          typst compile --package-path universe-stage/packages \
+            "${staged}/template/main.typ" "$RUNNER_TEMP/template-check.pdf"
+
+      - name: Cache typst-package-check
+        uses: actions/cache@v6
+        with:
+          path: ~/.cargo/bin/typst-package-check
+          key: typst-package-check-${{ runner.os }}-v0.7.0
+
+      - name: Install package validator
+        run: |
+          set -eu
+          if [ ! -x "$HOME/.cargo/bin/typst-package-check" ]; then
+            cargo install --locked --git https://github.com/typst/package-check.git \
+              --tag v0.7.0 typst-package-check
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Check Universe package
+        env:
+          PKG_NAME: ${{ needs.build.outputs.pkg_name }}
+          PKG_VERSION: ${{ needs.build.outputs.pkg_version }}
+        run: typst-package-check check "universe-stage/packages/preview/${PKG_NAME}/${PKG_VERSION}"
+
+      - name: Push branch to fork and open draft PR
+        env:
+          GH_TOKEN: ${{ secrets.UNIVERSE_TOKEN }}
+        run: |
+          set -eu
+          branch="${PKG_NAME}-${PKG_VERSION}"
+          fork_owner="${UNIVERSE_SLUG%%/*}"
+          staged="$(pwd)/universe-stage/packages/preview/${PKG_NAME}/${PKG_VERSION}"
+
+          if ! gh repo view "$UNIVERSE_SLUG" >/dev/null 2>&1; then
+            gh repo fork "$UPSTREAM_REPO" --clone=false --default-branch-only
+          fi
+          gh repo sync "$UNIVERSE_SLUG" --source "$UPSTREAM_REPO" --branch main
+
+          git clone --depth 1 --no-checkout --filter=blob:none \
+            "https://${UNIVERSE_HOST}/${UPSTREAM_REPO}.git" packages-checkout
+          cd packages-checkout
+          git sparse-checkout init --cone
+          git sparse-checkout set "packages/preview/${PKG_NAME}"
+          git checkout -B "$branch" origin/main
+
+          rm -rf "packages/preview/${PKG_NAME}/${PKG_VERSION}"
+          mkdir -p "packages/preview/${PKG_NAME}"
+          cp -R "$staged" "packages/preview/${PKG_NAME}/${PKG_VERSION}"
+
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+          git add "packages/preview/${PKG_NAME}/${PKG_VERSION}"
+          if ! git diff --cached --quiet; then
+            git commit -m "${PKG_NAME}:${PKG_VERSION}"
+          fi
+
+          git remote add fork "https://x-access-token:${GH_TOKEN}@${UNIVERSE_HOST}/${UNIVERSE_SLUG}.git"
+          git push --force fork "HEAD:refs/heads/${branch}"
+
+          cat > ../pr-body.md <<EOF
+          I am submitting \`${PKG_NAME}:${PKG_VERSION}\` from https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${PKG_VERSION}.
+
+          - [x] Includes a valid \`typst.toml\`, README, library source, and template.
+          - [x] Package tests and the Typst Universe package validator pass.
+          - [x] Includes the README preview, template thumbnail, and PDF manual; excludes source docs and local build output.
+          EOF
+
+          existing="$(gh pr list --repo "$UPSTREAM_REPO" --head "${fork_owner}:${branch}" --state open --json url --jq '.[0].url // empty')"
+          if [ -n "$existing" ]; then
+            echo "Updated existing draft PR: $existing"
+          else
+            gh pr create \
+              --draft \
+              --repo "$UPSTREAM_REPO" \
+              --base main \
+              --head "${fork_owner}:${branch}" \
+              --title "${PKG_NAME}:${PKG_VERSION}" \
+              --body-file ../pr-body.md
+          fi

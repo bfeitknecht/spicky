@@ -7,40 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-<details>
-<summary>Migration guide from v0.1.X</summary>
-
-<!-- Write migration guide here -->
-
-</details>
-
 ### Added
+
+- Configurable page layout, typography, heading numbering, and page numbering in `conf`.
+- `pseudocode` as a descriptive alias for the existing `pseudo` helper.
+- Release preparation for optional Typst Universe submissions using the `UNIVERSE_*` settings.
 
 ### Changed
 
-### Deprecated
-
-### Removed
+- Updated the template artwork to a centered 3:2 thumbnail that fits Typst Universe cards.
+- Refreshed the README, starter template, example, and manual.
+- Replaced grayscale container fills with restrained semantic colors; each container remains customizable.
+- Package archives retain the rendered README example, template thumbnail, and PDF manual while omitting local build output.
 
 ### Fixed
 
-### Security
+- Corrected the example's local import path and expanded package smoke checks.
+- Prevented package builds from recursively including their own output or targeting the project root.
 
-## [0.1.0] - 2025-01-01
+## [0.1.0] - 2026-07-23
 
 ### Added
 
-- Initial release of the spicky templating engine.
-- Added basic template rendering support.
-- Provided example templates in the `assets` directory.
-- Added documentation and a quick start guide.
-
-<!--
-Below are the target URLs for each version
-You can link version numbers (in level-2 headings)
-to the corresponding tag on GitHub, or the diff
-in comparison to the previous release
--->
+- Initial release of the `spicky` cheatsheet helpers and template.
 
 [Unreleased]: https://github.com/bfeitknecht/spicky/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/bfeitknecht/spicky/releases/tag/v0.1.0
